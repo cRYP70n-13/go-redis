@@ -6,3 +6,6 @@
 
 # Go workspace file
 go.work
+
+# Some files that I use for running/Debugging
+bin/

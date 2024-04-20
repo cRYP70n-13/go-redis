@@ -6,4 +6,4 @@ test:
 
 run: build
 	@./bin/goredis
-.PHONEY: build
+.PHONEY: run

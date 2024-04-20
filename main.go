@@ -22,9 +22,14 @@ type Server struct {
 	ln        net.Listener
 	addPeerCh chan *Peer
 	doneCh    chan struct{}
-	msgCh     chan []byte
+	msgCh     chan Message
 
 	Kv *KV
+}
+
+type Message struct {
+	data []byte
+	peer *Peer
 }
 
 func NewServer(cfg Config) *Server {
@@ -37,7 +42,7 @@ func NewServer(cfg Config) *Server {
 		peers:     make(map[*Peer]bool),
 		addPeerCh: make(chan *Peer),
 		doneCh:    make(chan struct{}),
-		msgCh:     make(chan []byte),
+		msgCh:     make(chan Message),
 		Kv:        NewKeyVal(),
 	}
 }
@@ -60,8 +65,8 @@ func (s *Server) Start() error {
 func (s *Server) loop() {
 	for {
 		select {
-		case rawMsg := <-s.msgCh:
-			if err := s.handleRawMessage(rawMsg); err != nil {
+		case msg := <-s.msgCh:
+			if err := s.handleMessage(msg); err != nil {
 				slog.Error("handle raw message error", "err", err)
 			}
 		case peer := <-s.addPeerCh:
@@ -84,8 +89,8 @@ func (s *Server) acceptLoop() error {
 	}
 }
 
-func (s *Server) handleRawMessage(rawMsg []byte) error {
-	cmd, err := parseCommand(string(rawMsg))
+func (s *Server) handleMessage(msg Message) error {
+	cmd, err := parseCommand(string(msg.data))
 	if err != nil {
 		return err
 	}
@@ -93,6 +98,16 @@ func (s *Server) handleRawMessage(rawMsg []byte) error {
 	switch v := cmd.(type) {
 	case SetCommand:
 		return s.Kv.Set(v.key, v.value)
+	case GetCommand:
+		val, ok := s.Kv.Get(v.key)
+		if !ok {
+			return fmt.Errorf("key not found")
+		}
+		_, err := msg.peer.Send(val)
+		if err != nil {
+			slog.Error("peer send error", "err", err)
+			return err
+		}
 	}
 
 	return nil
@@ -101,7 +116,6 @@ func (s *Server) handleRawMessage(rawMsg []byte) error {
 func (s *Server) handleConn(conn net.Conn) {
 	peer := NewPeer(conn, s.msgCh)
 	s.addPeerCh <- peer
-	slog.Info("new peer connected", "remoteAdd", peer.conn.RemoteAddr())
 	if err := peer.readLoop(); err != nil {
 		slog.Error("peer read error", "err", err, "remoteAddr", peer.conn.RemoteAddr())
 	}
@@ -121,9 +135,12 @@ func main() {
 		}
 	}
 
-	fmt.Println(server.Kv.data)
-	val, _ := server.Kv.Get([]byte("Otmane_1"))
-	fmt.Println("OH HELLO", string(val))
+	value, err := client.Get(context.Background(), "Otmane_9")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(value)
 
 	select {} // This is just blocking so our program won't exit
 }
