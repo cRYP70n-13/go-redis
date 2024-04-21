@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math/rand"
 	"net"
 
 	"redis-clone/client"
@@ -99,6 +100,7 @@ func (s *Server) handleMessage(msg Message) error {
 	case SetCommand:
 		return s.Kv.Set(v.key, v.value)
 	case GetCommand:
+		fmt.Println(string(v.key), string(v.value))
 		val, ok := s.Kv.Get(v.key)
 		if !ok {
 			return fmt.Errorf("key not found")
@@ -129,13 +131,13 @@ func main() {
 
 	client := client.New("localhost:5001")
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		if err := client.Set(context.Background(), fmt.Sprintf("Otmane_%d", i), fmt.Sprintf("Kimdil_%d", i)); err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	value, err := client.Get(context.Background(), "Otmane_9")
+	value, err := client.Get(context.Background(), fmt.Sprintf("Otmane_%d", rand.Intn(20)))
 	if err != nil {
 		log.Fatal(err)
 	}

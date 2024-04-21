@@ -41,7 +41,6 @@ func parseCommand(raw string) (Command, error) {
 				case CommandSET:
 					return parseSetCommand(v)
 				case CommandGET:
-					// TODO: Implement the GET command stuff
 					return parseGetCommand(v)
 				}
 			}
