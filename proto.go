@@ -2,15 +2,12 @@ package main
 
 import (
 	"bytes"
-	"fmt"
-	"io"
-
-	"github.com/tidwall/resp"
 )
 
 const (
-	CommandSET = "SET"
-	CommandGET = "GET"
+	CommandSET   = "set"
+	CommandGET   = "get"
+	CommandHELLO = "hello"
 )
 
 type Command interface{}
@@ -25,30 +22,19 @@ type GetCommand struct {
 	key []byte
 }
 
-// parseCommand parses the raw string that we get from the TCP connection
-// and it will return the necessary elements for each of the commands we can handle.
-func parseCommand(raw string) (Command, error) {
-	rd := resp.NewReader(bytes.NewBufferString(raw))
+type HelloCommand struct {
+	value string
+}
 
-	for {
-		v, _, err := rd.ReadValue()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
+func writeRespMap(m map[string]string) []byte {
+	buf := &bytes.Buffer{}
+	buf.WriteString("%2\r\n+first\r\n:1\r\n+second\r\n:2\r\n")
+	// buf.WriteString("%" + fmt.Sprintf("%d\r\n", len(m)))
+	// wr := resp.NewWriter(buf)
+	// for k, v := range m {
+	// 	wr.WriteString(k)
+	// 	wr.WriteString(":" + v)
+	// }
 
-		if v.Type() == resp.Array {
-			for _, value := range v.Array() {
-				switch value.String() {
-				case CommandSET:
-					return parseSetCommand(v)
-				case CommandGET:
-					return parseGetCommand(v)
-				}
-			}
-		}
-	}
-	return nil, fmt.Errorf("invalid or unknown command received: %s", raw)
+	return buf.Bytes()
 }

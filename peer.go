@@ -26,8 +26,8 @@ func (p *Peer) Send(msg []byte) (int, error) {
 	return p.conn.Write(msg)
 }
 
-// readLoop will read whatever we receive in the connection and sends it to our server
-// via the msg channel
+// readLoop will read whatever we receive in the connection and
+// sends it to our server via the msg channel
 func (p *Peer) readLoop() error {
 	rd := resp.NewReader(p.conn)
 
@@ -53,7 +53,6 @@ func (p *Peer) readLoop() error {
 						cmd:  cmd,
 						peer: p,
 					}
-
 				case CommandGET:
 					cmd, err := parseGetCommand(v)
 					if err != nil {
@@ -63,7 +62,23 @@ func (p *Peer) readLoop() error {
 						cmd:  cmd,
 						peer: p,
 					}
+				case CommandHELLO:
+					cmd, err := parseHelloCommand(v)
+					if err != nil {
+						return err
+					}
+					p.msgCh <- Message{
+						cmd:  cmd,
+						peer: p,
+					}
+				default:
+					fmt.Println("That's a case that we cannot handle atm: ", v.Array())
 				}
+
+				// p.msgCh <- Message{
+				// 	cmd:  cmd,
+				// 	peer: p,
+				// }
 			}
 		}
 	}
@@ -101,6 +116,17 @@ func parseGetCommand(v resp.Value) (GetCommand, error) {
 	}
 	cmd := GetCommand{
 		key: v.Array()[1].Bytes(),
+	}
+
+	return cmd, nil
+}
+
+func parseHelloCommand(v resp.Value) (HelloCommand, error) {
+	if len(v.Array()) != 2 {
+		return HelloCommand{}, fmt.Errorf("invalid number of variables for HELLO command")
+	}
+	cmd := HelloCommand{
+		value: v.Array()[0].String(),
 	}
 
 	return cmd, nil

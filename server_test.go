@@ -11,6 +11,15 @@ import (
 	"redis-clone/client"
 )
 
+func TestClientHello(t *testing.T) {
+	in := map[string]string{
+		"server":  "redis",
+		"version": "6.0.0",
+	}
+	out := writeRespMap(in)
+	fmt.Println(string(out))
+}
+
 // TODO: fix this potato server to correctly communicate when it's done and when it's still up and running.
 // to avoid the time.Sleeps
 func TestServerWithClients(t *testing.T) {

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"log/slog"
 	"net"
+	"reflect"
 )
 
 const DEFAULT_CONFIG_ADDR = ":5001"
@@ -106,19 +108,45 @@ func (s *Server) acceptLoop() error {
 // handleMessage parses the command we receive in our connection and then executes the
 // necessary function e.g: GET, SET ...
 func (s *Server) handleMessage(msg Message) error {
+	slog.Info("we got the command", "type", reflect.TypeOf(msg.cmd))
 	switch v := msg.cmd.(type) {
 	case SetCommand:
-		return s.Kv.Set(v.key, v.value)
+		if err := s.Kv.Set(v.key, v.value); err != nil {
+			return err
+		}
+		_, err := msg.peer.Send([]byte("+OK\r\n"))
+		if err != nil {
+			return fmt.Errorf("peer send error %s", err)
+		}
+		slog.Info("We successfully set the key to the value", "key", string(v.key), "value", string(v.value))
 	case GetCommand:
 		val, ok := s.Kv.Get(v.key)
 		if !ok {
+			// TODO: Respond to the redis client with proper errors so we handle them on the client side
+			// And we also need to clean up this code make correct writers and stuff...
 			return fmt.Errorf("key not found")
 		}
-		_, err := msg.peer.Send(val)
+		buf := &bytes.Buffer{}
+		buf.WriteString("+" + string(val) + "\r\n")
+		_, err := msg.peer.Send(buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("peer send error %s", err)
+		}
+	case HelloCommand:
+		spec := map[string]string{
+			"server":  "redis",
+			"role":    "master",
+			"version": "6.0.0",
+			"mode":    "standalone",
+			"proto":   "3",
+		}
+		resMap := writeRespMap(spec)
+		_, err := msg.peer.Send(resMap)
 		if err != nil {
 			slog.Error("peer send error", "err", err)
-			return err
+			return fmt.Errorf("peer send error %s", err)
 		}
+		slog.Info("response sent successfully to the client", "resMap", resMap)
 	}
 
 	return nil

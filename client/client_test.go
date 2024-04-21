@@ -1,16 +1,33 @@
 package client
 
 import (
+	// "bytes"
 	"context"
 	"fmt"
 	"log"
 	"sync"
 	"testing"
+
+	"github.com/redis/go-redis/v9"
+	// "github.com/tidwall/resp"
 )
 
-func init() {
-	// TODO: Decouple the server from the main package make a separated one
-	// then use it here to test this $hit
+func TestNewClientRedisClient(t *testing.T) {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:       "localhost:5001",
+		Password:   "",
+		DB:         0,
+		MaxRetries: 2,
+	})
+	fmt.Println(rdb)
+	fmt.Println("This shit is working")
+
+	if err := rdb.Set(context.Background(), "otmane", "kimdil", 0).Err(); err != nil {
+		panic(err)
+	}
+
+	res := rdb.Get(context.Background(), "otmane")
+	fmt.Println("Server's response for the GET => ", res.Val())
 }
 
 func TestNewClients(t *testing.T) {
@@ -42,4 +59,3 @@ func TestNewClients(t *testing.T) {
 	}
 	wg.Wait()
 }
-
