@@ -10,27 +10,27 @@ import (
 
 type Client struct {
 	addr string
+	conn net.Conn
 }
 
-func New(addr string) *Client {
+func New(addr string) (*Client, error) {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Client{
 		addr: addr,
-	}
+		conn: conn,
+	}, nil
 }
 
-// Set sends a set RPC to the server.
+// Set sends a SET RPC to the server.
 func (c *Client) Set(ctx context.Context, key string, val string) error {
-	// FIXME: This is very bad we are dialing each time we get a SET RPC which should not be the case
-	// We have to dial only once and keep this connection ongoing between the client and the server until one of them goes down.
-	conn, err := net.Dial("tcp", c.addr)
-	if err != nil {
-		return err
-	}
-
 	buf := &bytes.Buffer{}
 
 	wr := resp.NewWriter(buf)
-	err = wr.WriteArray([]resp.Value{
+	err := wr.WriteArray([]resp.Value{
 		resp.StringValue("SET"),
 		resp.StringValue(key),
 		resp.StringValue(val),
@@ -39,22 +39,18 @@ func (c *Client) Set(ctx context.Context, key string, val string) error {
 		return err
 	}
 
-	_, err = conn.Write(buf.Bytes())
+	_, err = c.conn.Write(buf.Bytes())
 
 	buf.Reset()
 	return err
 }
 
+// Get sends a GET RPC to the server and get's a response back.
 func (c *Client) Get(ctx context.Context, key string) (string, error) {
-	conn, err := net.Dial("tcp", c.addr)
-	if err != nil {
-		return "", err
-	}
-
 	buf := &bytes.Buffer{}
 
 	wr := resp.NewWriter(buf)
-	err = wr.WriteArray([]resp.Value{
+	err := wr.WriteArray([]resp.Value{
 		resp.StringValue("GET"),
 		resp.StringValue(key),
 	})
@@ -62,13 +58,13 @@ func (c *Client) Get(ctx context.Context, key string) (string, error) {
 		return "", err
 	}
 
-	_, err = conn.Write(buf.Bytes())
+	_, err = c.conn.Write(buf.Bytes())
 	if err != nil {
 		return "", err
 	}
 
 	respBuffer := make([]byte, 1024)
-	n, err := conn.Read(respBuffer)
+	n, err := c.conn.Read(respBuffer)
 
 	return string(respBuffer[:n]), err
 }

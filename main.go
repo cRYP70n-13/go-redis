@@ -1,14 +1,10 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"log/slog"
-	"math/rand"
 	"net"
-
-	"redis-clone/client"
 )
 
 const DEFAULT_CONFIG_ADDR = ":5001"
@@ -17,6 +13,7 @@ type Config struct {
 	listenAddress string
 }
 
+// Server struct is the representation of our server with the necessary config.
 type Server struct {
 	Config
 	peers     map[*Peer]bool
@@ -29,10 +26,11 @@ type Server struct {
 }
 
 type Message struct {
-	data []byte
+	cmd  Command
 	peer *Peer
 }
 
+// NewServer will create a new instance of our server with some basic defaults.
 func NewServer(cfg Config) *Server {
 	if len(cfg.listenAddress) == 0 {
 		cfg.listenAddress = DEFAULT_CONFIG_ADDR
@@ -48,6 +46,7 @@ func NewServer(cfg Config) *Server {
 	}
 }
 
+// Start will start our server with the config provided in the constructor.
 func (s *Server) Start() error {
 	ln, err := net.Listen("tcp", s.listenAddress)
 	if err != nil {
@@ -63,6 +62,10 @@ func (s *Server) Start() error {
 	return s.acceptLoop()
 }
 
+// loop with just loop forever listening on the msg channel in case we
+// receive anything we send it to the handler if it's a message,
+// and if it's a peer we add it to the map of peers that our server is holding
+// in case we received done msg or quit we just return to break the loop
 func (s *Server) loop() {
 	for {
 		select {
@@ -78,6 +81,7 @@ func (s *Server) loop() {
 	}
 }
 
+// acceptLoop is accepting tcp connections and making each one of them a peer
 func (s *Server) acceptLoop() error {
 	for {
 		conn, err := s.ln.Accept()
@@ -90,17 +94,13 @@ func (s *Server) acceptLoop() error {
 	}
 }
 
+// handleMessage parses the command we receive in our connection and then executes the
+// necessary function e.g: GET, SET ...
 func (s *Server) handleMessage(msg Message) error {
-	cmd, err := parseCommand(string(msg.data))
-	if err != nil {
-		return err
-	}
-
-	switch v := cmd.(type) {
+	switch v := msg.cmd.(type) {
 	case SetCommand:
 		return s.Kv.Set(v.key, v.value)
 	case GetCommand:
-		fmt.Println(string(v.key), string(v.value))
 		val, ok := s.Kv.Get(v.key)
 		if !ok {
 			return fmt.Errorf("key not found")
@@ -115,6 +115,8 @@ func (s *Server) handleMessage(msg Message) error {
 	return nil
 }
 
+// handleConn will create a new peer for each connection that we are handling
+// and send that peer over a channel to our server then triggers the read loop for ongoing peer's connection.
 func (s *Server) handleConn(conn net.Conn) {
 	peer := NewPeer(conn, s.msgCh)
 	s.addPeerCh <- peer
@@ -125,24 +127,5 @@ func (s *Server) handleConn(conn net.Conn) {
 
 func main() {
 	server := NewServer(Config{})
-	go func() {
-		log.Fatal(server.Start())
-	}()
-
-	client := client.New("localhost:5001")
-
-	for i := 0; i < 20; i++ {
-		if err := client.Set(context.Background(), fmt.Sprintf("Otmane_%d", i), fmt.Sprintf("Kimdil_%d", i)); err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	value, err := client.Get(context.Background(), fmt.Sprintf("Otmane_%d", rand.Intn(20)))
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(value)
-
-	select {} // This is just blocking so our program won't exit
+	log.Fatal(server.Start())
 }
