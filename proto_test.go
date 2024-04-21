@@ -11,5 +11,6 @@ func TestProtocol(t *testing.T) {
     if err != nil {
         t.Fatal(err)
     }
-    fmt.Println(cmd)
+    setCommand := cmd.(SetCommand)
+    fmt.Println(string(setCommand.key), string(setCommand.value))
 }

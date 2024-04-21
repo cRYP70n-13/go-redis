@@ -1,10 +1,10 @@
+.PHONEY: run
+
 build:
-	@go build -o bin/goredis .
+	@go build -race -o bin/goredis .
 
 test:
-	@go test -race -v ./...
+	@go test -timeout=10s -v ./...
 
 run: build
 	@./bin/goredis
-
-.PHONEY: run

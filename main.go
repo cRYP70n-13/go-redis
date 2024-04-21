@@ -16,11 +16,14 @@ type Config struct {
 // Server struct is the representation of our server with the necessary config.
 type Server struct {
 	Config
-	peers     map[*Peer]bool
-	ln        net.Listener
-	addPeerCh chan *Peer
-	doneCh    chan struct{}
-	msgCh     chan Message
+
+	peers map[*Peer]bool
+
+	ln           net.Listener
+	addPeerCh    chan *Peer
+	removePeerCh chan *Peer
+	doneCh       chan struct{}
+	msgCh        chan Message
 
 	Kv *KV
 }
@@ -37,12 +40,13 @@ func NewServer(cfg Config) *Server {
 	}
 
 	return &Server{
-		Config:    cfg,
-		peers:     make(map[*Peer]bool),
-		addPeerCh: make(chan *Peer),
-		doneCh:    make(chan struct{}),
-		msgCh:     make(chan Message),
-		Kv:        NewKeyVal(),
+		Config:       cfg,
+		peers:        make(map[*Peer]bool),
+		addPeerCh:    make(chan *Peer),
+		doneCh:       make(chan struct{}),
+		msgCh:        make(chan Message),
+		removePeerCh: make(chan *Peer),
+		Kv:           NewKeyVal(),
 	}
 }
 
@@ -75,6 +79,11 @@ func (s *Server) loop() {
 			}
 		case peer := <-s.addPeerCh:
 			s.peers[peer] = true
+			slog.Info("new peer connected: ", "remoteAddr", peer.conn.RemoteAddr())
+		case peerToRemove := <-s.removePeerCh:
+			// FIXME: a possible race condition is here
+			delete(s.peers, peerToRemove)
+			slog.Info("peer disconnected", "remoteAdd", peerToRemove.conn.RemoteAddr())
 		case <-s.doneCh:
 			return
 		}
@@ -118,7 +127,7 @@ func (s *Server) handleMessage(msg Message) error {
 // handleConn will create a new peer for each connection that we are handling
 // and send that peer over a channel to our server then triggers the read loop for ongoing peer's connection.
 func (s *Server) handleConn(conn net.Conn) {
-	peer := NewPeer(conn, s.msgCh)
+	peer := NewPeer(conn, s.msgCh, s.removePeerCh)
 	s.addPeerCh <- peer
 	if err := peer.readLoop(); err != nil {
 		slog.Error("peer read error", "err", err, "remoteAddr", peer.conn.RemoteAddr())

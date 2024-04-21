@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"testing"
 )
 
@@ -12,25 +13,33 @@ func init() {
 	// then use it here to test this $hit
 }
 
-// TODO: With this approach we basically gonna break our CI because the server is not running
-// Will need to run the server here in the same test and then run the client, looks like a good
-// candidate for init function.
-func TestNewClient(t *testing.T) {
-	t.Skip(t)
-	client, err := New("localhost:5001")
-	if err != nil {
-		t.Error(err)
-	}
+func TestNewClients(t *testing.T) {
+	nClients := 10
+	wg := sync.WaitGroup{}
+	wg.Add(nClients)
+	for i := 0; i < nClients; i++ {
+		go func(iterator int) {
+			client, err := New("localhost:5001")
+			if err != nil {
+				t.Error(err)
+			}
+			defer client.Close()
 
-	for i := 0; i < 20; i++ {
-		if err := client.Set(context.Background(), fmt.Sprintf("Otmane_%d", i), fmt.Sprintf("Kimdil_%d", i)); err != nil {
-			log.Fatal(err)
-		}
+			key := fmt.Sprintf("client_foo_%d", iterator)
+			value := fmt.Sprintf("client_bar_%d", iterator)
+			if err := client.Set(context.Background(), key, value); err != nil {
+				log.Fatal(err)
+			}
 
-		value, err := client.Get(context.Background(), fmt.Sprintf("Otmane_%d", i))
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println("GET =>", value)
+			val, err := client.Get(context.Background(), key)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("client number %d, sent RPC GET -> %s and got this value back => %s\n", iterator, key, val)
+
+			wg.Done()
+		}(i)
 	}
+	wg.Wait()
 }
+

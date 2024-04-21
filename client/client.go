@@ -26,14 +26,14 @@ func New(addr string) (*Client, error) {
 }
 
 // Set sends a SET RPC to the server.
-func (c *Client) Set(ctx context.Context, key string, val string) error {
+func (c *Client) Set(ctx context.Context, key string, val any) error {
 	buf := &bytes.Buffer{}
 
 	wr := resp.NewWriter(buf)
 	err := wr.WriteArray([]resp.Value{
 		resp.StringValue("SET"),
 		resp.StringValue(key),
-		resp.StringValue(val),
+		resp.AnyValue(val),
 	})
 	if err != nil {
 		return err
@@ -67,4 +67,8 @@ func (c *Client) Get(ctx context.Context, key string) (string, error) {
 	n, err := c.conn.Read(respBuffer)
 
 	return string(respBuffer[:n]), err
+}
+
+func (c *Client) Close() error {
+    return c.conn.Close()
 }
