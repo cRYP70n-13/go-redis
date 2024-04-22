@@ -45,14 +45,16 @@ func (p *Peer) readLoop() error {
 			var cmd Command
 			rawCmd := v.Array()[0]
 			switch rawCmd.String() {
+			case CommandClient:
+				cmd = ClientCommand{
+					value: v.Array()[1].String(),
+				}
 			case CommandSET:
-				fmt.Println("Client sent command", CommandSET)
 				cmd, err = parseSetCommand(v)
 				if err != nil {
 					return err
 				}
 			case CommandGET:
-				fmt.Println("Client sent command", CommandGET)
 				cmd, err = parseGetCommand(v)
 				if err != nil {
 					return err

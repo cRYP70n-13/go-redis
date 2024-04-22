@@ -2,12 +2,16 @@ package main
 
 import (
 	"bytes"
+	"fmt"
+
+	"github.com/tidwall/resp"
 )
 
 const (
-	CommandSET   = "set"
-	CommandGET   = "get"
-	CommandHELLO = "hello"
+	CommandSET    = "set"
+	CommandGET    = "get"
+	CommandHELLO  = "hello"
+	CommandClient = "client"
 )
 
 type Command interface{}
@@ -26,16 +30,17 @@ type HelloCommand struct {
 	value string
 }
 
-// TODO: Change this to set whatever we have inside the incoming map
+type ClientCommand struct {
+	value string
+}
+
 func writeRespMap(m map[string]string) []byte {
 	buf := &bytes.Buffer{}
-	buf.WriteString("%2\r\n+first\r\n:1\r\n+second\r\n:2\r\n")
-	// buf.WriteString("%" + fmt.Sprintf("%d\r\n", len(m)))
-	// wr := resp.NewWriter(buf)
-	// for k, v := range m {
-	// 	wr.WriteString(k)
-	// 	wr.WriteString(":" + v)
-	// }
-
+	buf.WriteString("%" + fmt.Sprintf("%d\r\n", len(m)))
+	rw := resp.NewWriter(buf)
+	for k, v := range m {
+        _ = rw.WriteString(k)
+        _ = rw.WriteString(":" + v)
+	}
 	return buf.Bytes()
 }

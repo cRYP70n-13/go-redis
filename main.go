@@ -1,13 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/tidwall/resp"
 )
 
 const DefaultConfigAddr = ":5001"
@@ -56,7 +57,7 @@ func (s *Server) Start() error {
 
 	s.Listener = ln
 
-    // go s.gracefullyShutdown()
+	// go s.gracefullyShutdown()
 	go s.loop()
 
 	log.Println("Server is running on", s.ListenAddress)
@@ -66,13 +67,13 @@ func (s *Server) Start() error {
 
 // TODO: Atm this is not really gracefully shutting down the server we have to make it work.
 func (s *Server) gracefullyShutdown() {
-    sigCh := make(chan os.Signal, 1)
-    signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-    <-sigCh
-    log.Println("Received termination signal. Shutting down...")
-    s.Listener.Close()
-    close(s.DoneCh)
-    os.Exit(0)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
+	log.Println("Received termination signal. Shutting down...")
+	s.Listener.Close()
+	close(s.DoneCh)
+	os.Exit(0)
 }
 
 // loop continuously listens for messages, adds or removes peers, or exits.
@@ -110,6 +111,8 @@ func (s *Server) acceptLoop() error {
 
 func (s *Server) handleMessage(msg Message) error {
 	switch v := msg.Cmd.(type) {
+	case ClientCommand:
+		return clientCommandHandler(msg)
 	case SetCommand:
 		return setCommandHandler(s, v, msg)
 	case GetCommand:
@@ -119,6 +122,12 @@ func (s *Server) handleMessage(msg Message) error {
 	}
 
 	return nil
+}
+
+func clientCommandHandler(msg Message) error {
+	return resp.
+		NewWriter(msg.Peer.conn).
+		WriteString("OK")
 }
 
 func helloCommandHandler(msg Message) error {
@@ -134,7 +143,6 @@ func helloCommandHandler(msg Message) error {
 	if err != nil {
 		return fmt.Errorf("error sending response to peer: %s", err)
 	}
-	log.Println("Response sent successfully to the client")
 	return nil
 }
 
@@ -143,13 +151,13 @@ func getCommandHandler(s *Server, v GetCommand, msg Message) error {
 	if !ok {
 		return fmt.Errorf("key not found")
 	}
-	log.Println("GET value:", string(val))
-	buf := &bytes.Buffer{}
-	buf.WriteString("+" + string(val) + "\r\n")
-	_, err := msg.Peer.Send(buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("error sending response to peer: %s", err)
+
+	if err := resp.
+		NewWriter(msg.Peer.conn).
+		WriteString(string(val)); err != nil {
+		return err
 	}
+
 	return nil
 }
 
@@ -157,21 +165,21 @@ func setCommandHandler(s *Server, v SetCommand, msg Message) error {
 	if err := s.Kv.Set(v.key, v.value); err != nil {
 		return err
 	}
-    // FIXME: We have a bug with our OWN WRITTEN CLIENT here
-    // When we send get request to get the value associated with the key
-    // we get the OK message which is not fine we have to send the value
-    // but with the official redis client this is working fine
-	_, err := msg.Peer.Send([]byte("+OK\r\n"))
-	if err != nil {
-		return fmt.Errorf("error sending response to peer: %s", err)
+	// FIXME: We have a bug with our OWN WRITTEN CLIENT here
+	// When we send get request to get the value associated with the key
+	// we get the OK message which is not fine we have to send the value
+	// but with the official redis client this is working fine
+	if err := resp.
+		NewWriter(msg.Peer.conn).
+		WriteString("OK"); err != nil {
+		return err
 	}
-	log.Println("Key successfully set to value", msg)
 	return nil
 }
 
 // handleConn handles incoming connections.
 func (s *Server) handleConn(conn net.Conn) {
-    defer conn.Close()
+	defer conn.Close()
 	peer := NewPeer(conn, s.MsgCh, s.RemovePeerCh)
 	s.AddPeerCh <- peer
 	if err := peer.readLoop(); err != nil {
