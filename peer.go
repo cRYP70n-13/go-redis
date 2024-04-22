@@ -42,43 +42,33 @@ func (p *Peer) readLoop() error {
 		}
 
 		if v.Type() == resp.Array {
-			for _, value := range v.Array() {
-				switch value.String() {
-				case CommandSET:
-					cmd, err := parseSetCommand(v)
-					if err != nil {
-						return err
-					}
-					p.msgCh <- Message{
-						cmd:  cmd,
-						peer: p,
-					}
-				case CommandGET:
-					cmd, err := parseGetCommand(v)
-					if err != nil {
-						return err
-					}
-					p.msgCh <- Message{
-						cmd:  cmd,
-						peer: p,
-					}
-				case CommandHELLO:
-					cmd, err := parseHelloCommand(v)
-					if err != nil {
-						return err
-					}
-					p.msgCh <- Message{
-						cmd:  cmd,
-						peer: p,
-					}
-				default:
-					fmt.Println("That's a case that we cannot handle atm: ", v.Array())
+			var cmd Command
+			rawCmd := v.Array()[0]
+			switch rawCmd.String() {
+			case CommandSET:
+				fmt.Println("Client sent command", CommandSET)
+				cmd, err = parseSetCommand(v)
+				if err != nil {
+					return err
 				}
+			case CommandGET:
+				fmt.Println("Client sent command", CommandGET)
+				cmd, err = parseGetCommand(v)
+				if err != nil {
+					return err
+				}
+			case CommandHELLO:
+				cmd, err = parseHelloCommand(v)
+				if err != nil {
+					return err
+				}
+			default:
+				fmt.Println("That's a case that we cannot handle atm: ", v.Array())
+			}
 
-				// p.msgCh <- Message{
-				// 	cmd:  cmd,
-				// 	peer: p,
-				// }
+			p.msgCh <- Message{
+				Cmd:  cmd,
+				Peer: p,
 			}
 		}
 	}

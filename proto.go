@@ -26,6 +26,7 @@ type HelloCommand struct {
 	value string
 }
 
+// TODO: Change this to set whatever we have inside the incoming map
 func writeRespMap(m map[string]string) []byte {
 	buf := &bytes.Buffer{}
 	buf.WriteString("%2\r\n+first\r\n:1\r\n+second\r\n:2\r\n")

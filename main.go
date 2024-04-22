@@ -4,100 +4,103 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"log/slog"
 	"net"
-	"reflect"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
-const DEFAULT_CONFIG_ADDR = ":5001"
+const DefaultConfigAddr = ":5001"
 
 type Config struct {
-	listenAddress string
+	ListenAddress string
 }
 
-// Server struct is the representation of our server with the necessary config.
 type Server struct {
 	Config
-
-	peers map[*Peer]bool
-
-	ln           net.Listener
-	addPeerCh    chan *Peer
-	removePeerCh chan *Peer
-	doneCh       chan struct{}
-	msgCh        chan Message
-
-	Kv *KV
+	Peers        map[*Peer]bool
+	Listener     net.Listener
+	AddPeerCh    chan *Peer
+	RemovePeerCh chan *Peer
+	DoneCh       chan struct{}
+	MsgCh        chan Message
+	Kv           *KV
 }
 
 type Message struct {
-	cmd  Command
-	peer *Peer
+	Cmd  Command
+	Peer *Peer
 }
 
-// NewServer will create a new instance of our server with some basic defaults.
 func NewServer(cfg Config) *Server {
-	if len(cfg.listenAddress) == 0 {
-		cfg.listenAddress = DEFAULT_CONFIG_ADDR
+	if cfg.ListenAddress == "" {
+		cfg.ListenAddress = DefaultConfigAddr
 	}
 
 	return &Server{
 		Config:       cfg,
-		peers:        make(map[*Peer]bool),
-		addPeerCh:    make(chan *Peer),
-		doneCh:       make(chan struct{}),
-		msgCh:        make(chan Message),
-		removePeerCh: make(chan *Peer),
+		Peers:        make(map[*Peer]bool),
+		AddPeerCh:    make(chan *Peer),
+		DoneCh:       make(chan struct{}),
+		MsgCh:        make(chan Message),
+		RemovePeerCh: make(chan *Peer),
 		Kv:           NewKeyVal(),
 	}
 }
 
-// Start will start our server with the config provided in the constructor.
 func (s *Server) Start() error {
-	ln, err := net.Listen("tcp", s.listenAddress)
+	ln, err := net.Listen("tcp", s.ListenAddress)
 	if err != nil {
 		return err
 	}
 
-	s.ln = ln
+	s.Listener = ln
 
+    // go s.gracefullyShutdown()
 	go s.loop()
 
-	slog.Info("server running", "listenAddr", s.listenAddress)
+	log.Println("Server is running on", s.ListenAddress)
 
 	return s.acceptLoop()
 }
 
-// loop with just loop forever listening on the msg channel in case we
-// receive anything we send it to the handler if it's a message,
-// and if it's a peer we add it to the map of peers that our server is holding
-// in case we received done msg or quit we just return to break the loop
+// TODO: Atm this is not really gracefully shutting down the server we have to make it work.
+func (s *Server) gracefullyShutdown() {
+    sigCh := make(chan os.Signal, 1)
+    signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+    <-sigCh
+    log.Println("Received termination signal. Shutting down...")
+    s.Listener.Close()
+    close(s.DoneCh)
+    os.Exit(0)
+}
+
+// loop continuously listens for messages, adds or removes peers, or exits.
 func (s *Server) loop() {
 	for {
 		select {
-		case msg := <-s.msgCh:
+		case msg := <-s.MsgCh:
 			if err := s.handleMessage(msg); err != nil {
-				slog.Error("handle raw message error", "err", err)
+				log.Println("Error handling message:", err)
 			}
-		case peer := <-s.addPeerCh:
-			s.peers[peer] = true
-			slog.Info("new peer connected: ", "remoteAddr", peer.conn.RemoteAddr())
-		case peerToRemove := <-s.removePeerCh:
-			// FIXME: a possible race condition is here
-			delete(s.peers, peerToRemove)
-			slog.Info("peer disconnected", "remoteAdd", peerToRemove.conn.RemoteAddr())
-		case <-s.doneCh:
+		case peer := <-s.AddPeerCh:
+			s.Peers[peer] = true
+			log.Println("New peer connected:", peer.conn.RemoteAddr())
+		case peerToRemove := <-s.RemovePeerCh:
+			delete(s.Peers, peerToRemove)
+			log.Println("Peer disconnected:", peerToRemove.conn.RemoteAddr())
+		case <-s.DoneCh:
 			return
 		}
 	}
 }
 
-// acceptLoop is accepting tcp connections and making each one of them a peer
+// acceptLoop accepts incoming connections and handles them.
 func (s *Server) acceptLoop() error {
 	for {
-		conn, err := s.ln.Accept()
+		conn, err := s.Listener.Accept()
 		if err != nil {
-			slog.Error("accept error", "err", err)
+			log.Println("Accept error:", err)
 			continue
 		}
 
@@ -105,60 +108,74 @@ func (s *Server) acceptLoop() error {
 	}
 }
 
-// handleMessage parses the command we receive in our connection and then executes the
-// necessary function e.g: GET, SET ...
 func (s *Server) handleMessage(msg Message) error {
-	slog.Info("we got the command", "type", reflect.TypeOf(msg.cmd))
-	switch v := msg.cmd.(type) {
+	switch v := msg.Cmd.(type) {
 	case SetCommand:
-		if err := s.Kv.Set(v.key, v.value); err != nil {
-			return err
-		}
-		_, err := msg.peer.Send([]byte("+OK\r\n"))
-		if err != nil {
-			return fmt.Errorf("peer send error %s", err)
-		}
-		slog.Info("We successfully set the key to the value", "key", string(v.key), "value", string(v.value))
+		return setCommandHandler(s, v, msg)
 	case GetCommand:
-		val, ok := s.Kv.Get(v.key)
-		if !ok {
-			// TODO: Respond to the redis client with proper errors so we handle them on the client side
-			// And we also need to clean up this code make correct writers and stuff...
-			return fmt.Errorf("key not found")
-		}
-		buf := &bytes.Buffer{}
-		buf.WriteString("+" + string(val) + "\r\n")
-		_, err := msg.peer.Send(buf.Bytes())
-		if err != nil {
-			return fmt.Errorf("peer send error %s", err)
-		}
+		return getCommandHandler(s, v, msg)
 	case HelloCommand:
-		spec := map[string]string{
-			"server":  "redis",
-			"role":    "master",
-			"version": "6.0.0",
-			"mode":    "standalone",
-			"proto":   "3",
-		}
-		resMap := writeRespMap(spec)
-		_, err := msg.peer.Send(resMap)
-		if err != nil {
-			slog.Error("peer send error", "err", err)
-			return fmt.Errorf("peer send error %s", err)
-		}
-		slog.Info("response sent successfully to the client", "resMap", resMap)
+		return helloCommandHandler(msg)
 	}
 
 	return nil
 }
 
-// handleConn will create a new peer for each connection that we are handling
-// and send that peer over a channel to our server then triggers the read loop for ongoing peer's connection.
+func helloCommandHandler(msg Message) error {
+	spec := map[string]string{
+		"server":  "redis",
+		"role":    "master",
+		"version": "6.0.0",
+		"mode":    "standalone",
+		"proto":   "3",
+	}
+	resMap := writeRespMap(spec)
+	_, err := msg.Peer.Send(resMap)
+	if err != nil {
+		return fmt.Errorf("error sending response to peer: %s", err)
+	}
+	log.Println("Response sent successfully to the client")
+	return nil
+}
+
+func getCommandHandler(s *Server, v GetCommand, msg Message) error {
+	val, ok := s.Kv.Get(v.key)
+	if !ok {
+		return fmt.Errorf("key not found")
+	}
+	log.Println("GET value:", string(val))
+	buf := &bytes.Buffer{}
+	buf.WriteString("+" + string(val) + "\r\n")
+	_, err := msg.Peer.Send(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("error sending response to peer: %s", err)
+	}
+	return nil
+}
+
+func setCommandHandler(s *Server, v SetCommand, msg Message) error {
+	if err := s.Kv.Set(v.key, v.value); err != nil {
+		return err
+	}
+    // FIXME: We have a bug with our OWN WRITTEN CLIENT here
+    // When we send get request to get the value associated with the key
+    // we get the OK message which is not fine we have to send the value
+    // but with the official redis client this is working fine
+	_, err := msg.Peer.Send([]byte("+OK\r\n"))
+	if err != nil {
+		return fmt.Errorf("error sending response to peer: %s", err)
+	}
+	log.Println("Key successfully set to value", msg)
+	return nil
+}
+
+// handleConn handles incoming connections.
 func (s *Server) handleConn(conn net.Conn) {
-	peer := NewPeer(conn, s.msgCh, s.removePeerCh)
-	s.addPeerCh <- peer
+    defer conn.Close()
+	peer := NewPeer(conn, s.MsgCh, s.RemovePeerCh)
+	s.AddPeerCh <- peer
 	if err := peer.readLoop(); err != nil {
-		slog.Error("peer read error", "err", err, "remoteAddr", peer.conn.RemoteAddr())
+		log.Println("Peer read error:", err)
 	}
 }
 

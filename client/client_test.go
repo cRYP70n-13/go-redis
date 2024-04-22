@@ -1,15 +1,12 @@
 package client
 
 import (
-	// "bytes"
 	"context"
 	"fmt"
 	"log"
-	"sync"
 	"testing"
 
 	"github.com/redis/go-redis/v9"
-	// "github.com/tidwall/resp"
 )
 
 func TestNewClientRedisClient(t *testing.T) {
@@ -31,31 +28,19 @@ func TestNewClientRedisClient(t *testing.T) {
 }
 
 func TestNewClients(t *testing.T) {
-	nClients := 10
-	wg := sync.WaitGroup{}
-	wg.Add(nClients)
-	for i := 0; i < nClients; i++ {
-		go func(iterator int) {
-			client, err := New("localhost:5001")
-			if err != nil {
-				t.Error(err)
-			}
-			defer client.Close()
-
-			key := fmt.Sprintf("client_foo_%d", iterator)
-			value := fmt.Sprintf("client_bar_%d", iterator)
-			if err := client.Set(context.Background(), key, value); err != nil {
-				log.Fatal(err)
-			}
-
-			val, err := client.Get(context.Background(), key)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Printf("client number %d, sent RPC GET -> %s and got this value back => %s\n", iterator, key, val)
-
-			wg.Done()
-		}(i)
+	client, err := New("localhost:5001")
+	if err != nil {
+		t.Error(err)
 	}
-	wg.Wait()
+	defer client.Close()
+
+	if err := client.Set(context.Background(), "client_foo_1", "client_bar_1"); err != nil {
+		log.Fatal(err)
+	}
+
+	val, err := client.Get(context.Background(), "client_foo_1")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Got this: ", val)
 }

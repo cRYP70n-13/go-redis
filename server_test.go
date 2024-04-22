@@ -62,7 +62,7 @@ func TestServerWithClients(t *testing.T) {
 
 	// FIXME: Same here :)
 	time.Sleep(time.Second)
-	if len(server.peers) != 0 {
-		t.Fatalf("expected 0 peers but got %d", len(server.peers))
+	if len(server.Peers) != 0 {
+		t.Fatalf("expected 0 peers but got %d", len(server.Peers))
 	}
 }
