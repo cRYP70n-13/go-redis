@@ -57,7 +57,6 @@ func (s *Server) Start() error {
 
 	s.Listener = ln
 
-	// go s.gracefullyShutdown()
 	go s.loop()
 
 	log.Println("Server is running on", s.ListenAddress)
@@ -69,10 +68,15 @@ func (s *Server) Start() error {
 func (s *Server) gracefullyShutdown() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+
+    s.DoneCh <- struct{}{}
 	<-sigCh
+
 	log.Println("Received termination signal. Shutting down...")
 	s.Listener.Close()
+
 	close(s.DoneCh)
+
 	os.Exit(0)
 }
 
@@ -169,7 +173,9 @@ func helloCommandHandler(msg peer.Message) error {
 func getCommandHandler(s *Server, v proto.GetCommand, msg peer.Message) error {
 	val, ok := s.Kv.Get(v.Key)
 	if !ok {
-		return fmt.Errorf("key not found")
+        return resp.
+            NewWriter(msg.Peer.Conn).
+            WriteString("Key not found Timmy")
 	}
 
 	return resp.
@@ -179,7 +185,9 @@ func getCommandHandler(s *Server, v proto.GetCommand, msg peer.Message) error {
 
 func setCommandHandler(s *Server, v proto.SetCommand, msg peer.Message) error {
 	if err := s.Kv.Set(v.Key, v.Value); err != nil {
-		return err
+        return resp.
+            NewWriter(msg.Peer.Conn).
+            WriteString(err.Error())
 	}
 	// FIXME: We have a bug with our OWN WRITTEN CLIENT here
 	// When we send get request to get the value associated with the key

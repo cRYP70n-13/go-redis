@@ -137,7 +137,7 @@ func parseHelloCommand(v resp.Value) (proto.HelloCommand, error) {
 }
 
 func parseCommandCommand(v resp.Value) (proto.CommandCommand, error) {
-	if len(v.Array()) != 2 {
+	if len(v.Array()) != 1 {
 		return proto.CommandCommand{}, fmt.Errorf("invalid number of variables for COMMAND command")
 	}
 	cmd := proto.CommandCommand{
