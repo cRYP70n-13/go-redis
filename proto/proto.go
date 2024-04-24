@@ -8,12 +8,17 @@ import (
 )
 
 const (
-	CommandSET     = "set"
-	CommandGET     = "get"
+	CommandSET     = "SET"
+	CommandGET     = "GET"
 	CommandHELLO   = "hello"
 	CommandClient  = "client"
 	CommandCOMMAND = "COMMAND"
+	CommandPING    = "PING"
+	CommandConfig  = "CONFIG"
 )
+
+// NOTE: actually this can be not just GET but can also be: SET, RESETSTAT and REWRITE
+// Okay now I need a way to handle complex commands
 
 type Command interface{}
 
@@ -37,6 +42,14 @@ type ClientCommand struct {
 
 type CommandCommand struct {
 	Value string
+}
+
+type CommandPing struct {
+	Value string
+}
+
+type CommandConfigGet struct {
+	Key, Value string	
 }
 
 func WriteRespMap(m map[string]string) []byte {

@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -11,8 +10,6 @@ import (
 	"redis-clone/keyval"
 	"redis-clone/peer"
 	"redis-clone/proto"
-
-	"github.com/tidwall/resp"
 )
 
 const DefaultConfigAddr = ":5001"
@@ -31,7 +28,6 @@ type Server struct {
 	MsgCh        chan peer.Message
 	Kv           *keyval.KV
 }
-
 
 func NewServer(cfg Config) *Server {
 	if cfg.ListenAddress == "" {
@@ -69,7 +65,7 @@ func (s *Server) gracefullyShutdown() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-    s.DoneCh <- struct{}{}
+	s.DoneCh <- struct{}{}
 	<-sigCh
 
 	log.Println("Received termination signal. Shutting down...")
@@ -123,79 +119,15 @@ func (s *Server) handleMessage(msg peer.Message) error {
 		return getCommandHandler(s, v, msg)
 	case proto.HelloCommand:
 		return helloCommandHandler(msg)
-    case proto.CommandCommand:
-        return commandCommandHandler(msg)
+	case proto.CommandCommand:
+		return commandCommandHandler(msg)
+	case proto.CommandPing:
+		return pingCommandHandler(msg)
+	case proto.CommandConfigGet:
+		return configCommandGetHandler(msg)
+	default:
+		return unhandledCommand(msg)
 	}
-
-	return nil
-}
-
-func clientCommandHandler(msg peer.Message) error {
-	return resp.
-		NewWriter(msg.Peer.Conn).
-		WriteString("OK")
-}
-
-func commandCommandHandler(msg peer.Message) error {
-	spec := map[string]string{
-		"server":  "redis",
-		"role":    "master",
-		"version": "6.0.0",
-		"mode":    "standalone",
-		"proto":   "3",
-		"Author":  "Otmane",
-	}
-	resMap := proto.WriteRespMap(spec)
-	_, err := msg.Peer.Send(resMap)
-	if err != nil {
-		return fmt.Errorf("error sending response to peer: %s", err)
-	}
-	return nil
-}
-
-func helloCommandHandler(msg peer.Message) error {
-	spec := map[string]string{
-		"server":  "redis",
-		"role":    "master",
-		"version": "6.0.0",
-		"mode":    "standalone",
-		"proto":   "3",
-		"Author":  "Otmane",
-	}
-	resMap := proto.WriteRespMap(spec)
-	_, err := msg.Peer.Send(resMap)
-	if err != nil {
-		return fmt.Errorf("error sending response to peer: %s", err)
-	}
-	return nil
-}
-
-func getCommandHandler(s *Server, v proto.GetCommand, msg peer.Message) error {
-	val, ok := s.Kv.Get(v.Key)
-	if !ok {
-        return resp.
-            NewWriter(msg.Peer.Conn).
-            WriteString("Key not found Timmy")
-	}
-
-	return resp.
-		NewWriter(msg.Peer.Conn).
-		WriteString(string(val))
-}
-
-func setCommandHandler(s *Server, v proto.SetCommand, msg peer.Message) error {
-	if err := s.Kv.Set(v.Key, v.Value); err != nil {
-        return resp.
-            NewWriter(msg.Peer.Conn).
-            WriteString(err.Error())
-	}
-	// FIXME: We have a bug with our OWN WRITTEN CLIENT here
-	// When we send get request to get the value associated with the key
-	// we get the OK message which is not fine we have to send the value
-	// but with the official redis client this is working fine
-	return resp.
-		NewWriter(msg.Peer.Conn).
-		WriteString("OK")
 }
 
 // handleConn handles incoming connections.
