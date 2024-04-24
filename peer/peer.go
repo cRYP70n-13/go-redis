@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"redis-clone/proto"
 
@@ -49,48 +50,13 @@ func (p *Peer) ReadLoop() error {
 		}
 
 		if v.Type() == resp.Array {
-			var cmd proto.Command
-			rawCmd := v.Array()[0]
-			switch rawCmd.String() {
-			case proto.CommandClient:
-				cmd = proto.ClientCommand{
-					Value: v.Array()[1].String(),
-				}
-			case proto.CommandSET:
-				cmd, err = parseSetCommand(v)
-				if err != nil {
-					return err
-				}
-			case proto.CommandGET:
-				cmd, err = parseGetCommand(v)
-				if err != nil {
-					return err
-				}
-			case proto.CommandHELLO:
-				cmd, err = parseHelloCommand(v)
-				if err != nil {
-					return err
-				}
-			case proto.CommandCOMMAND:
-				cmd, err = parseCommandCommand(v)
-				if err != nil {
-					return err
-				}
-			case proto.CommandPING:
-				cmd, err = parsePingCommand(v)
-				if err != nil {
-					return err
-				}
-			case proto.CommandConfig:
-				cmd, err = parseConfigGetCommand(v)
-				if err != nil {
-					return err
-				}
-			default:
-				fmt.Println("That's a case that we cannot handle atm: ", v.Array())
+			cmd, err := parseCommand(v)
+			if err != nil {
+				fmt.Println("Error parsing command:", err)
+				continue
 			}
 
-			// TODO: Think about sending an error here in case we got something that we don't expect
+			// TODO: Think of a better way to handle errors
 			p.MsgCh <- Message{
 				Cmd:  cmd,
 				Peer: p,
@@ -98,6 +64,50 @@ func (p *Peer) ReadLoop() error {
 		}
 	}
 	return nil
+}
+
+func parseCommand(v resp.Value) (proto.Command, error) {
+	if len(v.Array()) < 1 {
+		return nil, fmt.Errorf("invalid command format: empty array")
+	}
+
+	rawCmd := v.Array()[0].String()
+	cmdType := strings.ToUpper(rawCmd)
+
+	switch cmdType {
+	case proto.CommandCLIENT:
+		return parseClientCommand(v)
+	case proto.CommandSET:
+		return parseSetCommand(v)
+	case proto.CommandGET:
+		return parseGetCommand(v)
+	case proto.CommandHELLO:
+		return parseHelloCommand(v)
+	case proto.CommandCOMMAND:
+		return parseCommandCommand(v)
+	case proto.CommandPING:
+		return parsePingCommand(v)
+	case proto.CommandCONFIG:
+		return parseConfigGetCommand(v)
+	case proto.CommandEXIST:
+		return parseExistCommand(v)
+	case proto.CommandDEL:
+		return parseDelCommand(v)
+	case proto.CommandINCR:
+		return parseIncrCommand(v)
+	case proto.CommandDECR:
+		return parseDecrCommand(v)
+	default:
+		return nil, fmt.Errorf("unsupported command: %s", cmdType)
+	}
+}
+
+func parseClientCommand(v resp.Value) (proto.ClientCommand, error) {
+	cmd := proto.ClientCommand{
+		Value: v.Array()[1].String(),
+	}
+
+	return cmd, nil
 }
 
 // parseSetCommand parses the set command in redis
@@ -159,35 +169,79 @@ func parseCommandCommand(v resp.Value) (proto.CommandCommand, error) {
 	return cmd, nil
 }
 
-func parsePingCommand(v resp.Value) (proto.CommandPing, error) {
+func parsePingCommand(v resp.Value) (proto.PingCommand, error) {
 	if len(v.Array()) > 2 {
-		return proto.CommandPing{}, fmt.Errorf("invalid number of variables for PING command")
+		return proto.PingCommand{}, fmt.Errorf("invalid number of variables for PING command")
 	}
-	cmd := proto.CommandPing{
+	cmd := proto.PingCommand{
 		Value: v.Array()[0].String(),
 	}
 
 	return cmd, nil
 }
 
-func parseConfigGetCommand(v resp.Value) (proto.CommandConfigGet, error) {
+func parseExistCommand(v resp.Value) (proto.ExistCommand, error) {
+	if len(v.Array()) != 2 {
+		return proto.ExistCommand{}, fmt.Errorf("invalid number of variables for GET command")
+	}
+	cmd := proto.ExistCommand{
+		Key: v.Array()[1].String(),
+	}
+
+	return cmd, nil
+}
+
+func parseConfigGetCommand(v resp.Value) (proto.ConfigGetCommand, error) {
 	if len(v.Array()) < 2 {
-		return proto.CommandConfigGet{}, fmt.Errorf("invalid number of variables for CONFIG command")
+		return proto.ConfigGetCommand{}, fmt.Errorf("invalid number of variables for CONFIG command")
 	}
 
 	fmt.Println(v.Array())
-	var cmd proto.CommandConfigGet
+	var cmd proto.ConfigGetCommand
 
 	if len(v.Array()) == 2 {
-		cmd = proto.CommandConfigGet{
+		cmd = proto.ConfigGetCommand{
 			Key:   v.Array()[1].String(),
 			Value: "",
 		}
 	} else if len(v.Array()) > 2 {
-		cmd = proto.CommandConfigGet{
+		cmd = proto.ConfigGetCommand{
 			Key:   v.Array()[1].String(),
 			Value: v.Array()[2].String(),
 		}
+	}
+
+	return cmd, nil
+}
+
+func parseDelCommand(v resp.Value) (proto.DelCommand, error) {
+	if len(v.Array()) != 2 {
+		return proto.DelCommand{}, fmt.Errorf("invalid number of variables for GET command")
+	}
+	cmd := proto.DelCommand{
+		Key: v.Array()[1].String(),
+	}
+
+	return cmd, nil
+}
+
+func parseIncrCommand(v resp.Value) (proto.IncrCommand, error) {
+	if len(v.Array()) != 2 {
+		return proto.IncrCommand{}, fmt.Errorf("invalid number of variables for GET command")
+	}
+	cmd := proto.IncrCommand{
+		Key: v.Array()[1].String(),
+	}
+
+	return cmd, nil
+}
+
+func parseDecrCommand(v resp.Value) (proto.DecrCommand, error) {
+	if len(v.Array()) != 2 {
+		return proto.DecrCommand{}, fmt.Errorf("invalid number of variables for GET command")
+	}
+	cmd := proto.DecrCommand{
+		Key: v.Array()[1].String(),
 	}
 
 	return cmd, nil

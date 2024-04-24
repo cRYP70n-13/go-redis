@@ -93,3 +93,35 @@ func configCommandGetHandler(msg peer.Message) error {
 		resp.StringValue("3600 1 300 100 60 10000"),
 	})
 }
+
+func existCommandHandler(s *Server, v proto.ExistCommand, msg peer.Message) error {
+	_, ok := s.Kv.Get([]byte(v.Key))
+	if !ok {
+		return resp.NewWriter(msg.Peer.Conn).WriteInteger(0)
+	}
+
+	return resp.NewWriter(msg.Peer.Conn).WriteInteger(1)
+}
+
+func delCommandHandler(s *Server, v proto.DelCommand, msg peer.Message) error {
+	s.Kv.Del([]byte(v.Key))
+	return resp.NewWriter(msg.Peer.Conn).WriteString("OK")
+}
+
+func decrCommandHandler(s *Server, v proto.DecrCommand, msg peer.Message) error {
+	res, err :=s.Kv.Decr([]byte(v.Key))
+	if err != nil {
+		return resp.NewWriter(msg.Peer.Conn).WriteError(err)
+	}
+
+	return resp.NewWriter(msg.Peer.Conn).WriteInteger(res)
+}
+	
+func incrCommandHandler(s *Server, v proto.IncrCommand, msg peer.Message) error {
+	res, err := s.Kv.Incr([]byte(v.Key))
+	if err != nil {
+		return resp.NewWriter(msg.Peer.Conn).WriteError(err)
+	}
+
+	return resp.NewWriter(msg.Peer.Conn).WriteInteger(res)
+}

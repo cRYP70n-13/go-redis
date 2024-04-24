@@ -121,10 +121,18 @@ func (s *Server) handleMessage(msg peer.Message) error {
 		return helloCommandHandler(msg)
 	case proto.CommandCommand:
 		return commandCommandHandler(msg)
-	case proto.CommandPing:
+	case proto.PingCommand:
 		return pingCommandHandler(msg)
-	case proto.CommandConfigGet:
+	case proto.ConfigGetCommand:
 		return configCommandGetHandler(msg)
+	case proto.ExistCommand:
+		return existCommandHandler(s, v, msg)
+	case proto.DelCommand:
+		return delCommandHandler(s, v, msg)
+	case proto.IncrCommand:
+		return incrCommandHandler(s, v, msg)
+	case proto.DecrCommand:
+		return decrCommandHandler(s, v, msg)
 	default:
 		return unhandledCommand(msg)
 	}
