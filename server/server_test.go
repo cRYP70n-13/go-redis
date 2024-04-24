@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -16,9 +16,9 @@ import (
 // TODO: fix this potato server to correctly communicate when it's done and when it's still up and running.
 // to avoid the time.Sleeps
 func TestServerWithClients(t *testing.T) {
-	server := NewServer(Config{})
+	s := NewServer(Config{})
 	go func() {
-		log.Fatal(server.Start())
+		log.Fatal(s.Start())
 	}()
 	// FIXME: This is more of a hack we need to sync this with a waitgroup or something
 	time.Sleep(time.Second)
@@ -55,18 +55,18 @@ func TestServerWithClients(t *testing.T) {
 
 	// FIXME: Same here :)
 	time.Sleep(time.Second)
-	if len(server.Peers) != 0 {
-		t.Fatalf("expected 0 peers but got %d", len(server.Peers))
+	if len(s.Peers) != 0 {
+		t.Fatalf("expected 0 peers but got %d", len(s.Peers))
 	}
 }
 
 func TestWithRedisGoClient(t *testing.T) {
 	listenAddr := ":5001"
-	server := NewServer(Config{
+	s := NewServer(Config{
 		ListenAddress: listenAddr,
 	})
 	go func() {
-		log.Fatal(server.Start())
+		log.Fatal(s.Start())
 	}()
 	time.Sleep(time.Millisecond * 400)
 
@@ -89,7 +89,8 @@ func TestWithRedisGoClient(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if newVal != val {
+        fmt.Println(newVal)
+        if newVal != val {
 			t.Fatalf("expected %s but got %s", val, newVal)
 		}
 	}

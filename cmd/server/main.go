@@ -7,8 +7,6 @@ import (
 )
 
 func main() {
-	s := server.NewServer(server.Config{
-        ListenAddress: "localhost:6379",
-    })
+	s := server.NewServer(server.Config{})
 	log.Fatal(s.Start())
 }

@@ -1,4 +1,4 @@
-package main
+package proto
 
 import (
 	"bytes"
@@ -8,39 +8,44 @@ import (
 )
 
 const (
-	CommandSET    = "set"
-	CommandGET    = "get"
-	CommandHELLO  = "hello"
-	CommandClient = "client"
+	CommandSET     = "set"
+	CommandGET     = "get"
+	CommandHELLO   = "hello"
+	CommandClient  = "client"
+	CommandCOMMAND = "COMMAND"
 )
 
 type Command interface{}
 
 // SetCommand our basic representation for the SET command in Redis.
 type SetCommand struct {
-	key, value []byte
+	Key, Value []byte
 }
 
 // GetCommand our basic representation for the GET command in redis
 type GetCommand struct {
-	key []byte
+	Key []byte
 }
 
 type HelloCommand struct {
-	value string
+	Value string
 }
 
 type ClientCommand struct {
-	value string
+	Value string
 }
 
-func writeRespMap(m map[string]string) []byte {
+type CommandCommand struct {
+	Value string
+}
+
+func WriteRespMap(m map[string]string) []byte {
 	buf := &bytes.Buffer{}
 	buf.WriteString("%" + fmt.Sprintf("%d\r\n", len(m)))
 	rw := resp.NewWriter(buf)
 	for k, v := range m {
-        _ = rw.WriteString(k)
-        _ = rw.WriteString(":" + v)
+		_ = rw.WriteString(k)
+		_ = rw.WriteString(":" + v)
 	}
 	return buf.Bytes()
 }
