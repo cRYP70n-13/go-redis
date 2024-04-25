@@ -13,7 +13,8 @@ import (
 
 type Peer struct {
 	Conn      net.Conn
-	MsgCh     chan Message
+	msgCh     chan Message
+	errorsCh  chan Errors
 	delPeerCh chan *Peer
 }
 
@@ -22,10 +23,16 @@ type Message struct {
 	Peer *Peer
 }
 
-func NewPeer(conn net.Conn, msgCh chan Message, delCh chan *Peer) *Peer {
+type Errors struct {
+	Err  error
+	Peer *Peer
+}
+
+func NewPeer(conn net.Conn, msgCh chan Message, delCh chan *Peer, errorsCh chan Errors) *Peer {
 	return &Peer{
 		Conn:      conn,
-		MsgCh:     msgCh,
+		errorsCh:  errorsCh,
+		msgCh:     msgCh,
 		delPeerCh: delCh,
 	}
 }
@@ -53,11 +60,15 @@ func (p *Peer) ReadLoop() error {
 			cmd, err := parseCommand(v)
 			if err != nil {
 				fmt.Println("Error parsing command:", err)
+				p.errorsCh <- Errors{
+					Err:  err,
+					Peer: p,
+				}
 				continue
 			}
 
 			// TODO: Think of a better way to handle errors
-			p.MsgCh <- Message{
+			p.msgCh <- Message{
 				Cmd:  cmd,
 				Peer: p,
 			}
