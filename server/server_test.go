@@ -39,7 +39,6 @@ func TestWithRedisGoClient(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-        fmt.Println(newVal)
         if newVal != val {
 			t.Fatalf("expected %s but got %s", val, newVal)
 		}

@@ -125,3 +125,12 @@ func incrCommandHandler(s *Server, v proto.IncrCommand, msg peer.Message) error 
 
 	return resp.NewWriter(msg.Peer.Conn).WriteInteger(res)
 }
+
+func lpushCommandHandler(s *Server, v proto.LpushCommand, msg peer.Message) error {
+    res, err := s.Kv.Push(v.Key, v.Value)
+	if err != nil {
+		return resp.NewWriter(msg.Peer.Conn).WriteError(err)
+	}
+
+    return resp.NewWriter(msg.Peer.Conn).WriteInteger(res)
+}

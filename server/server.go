@@ -76,7 +76,7 @@ func (s *Server) loop() {
 			delete(s.Peers, peerToRemove)
 			log.Println("Peer disconnected:", peerToRemove.Conn.RemoteAddr())
 		case err := <-s.ErrorsCh:
-            _ = s.handleErrors(err)
+			_ = s.handleErrors(err)
 		case <-s.DoneCh:
 			return
 		}
@@ -124,6 +124,8 @@ func (s *Server) handleMessage(msg peer.Message) error {
 		return incrCommandHandler(s, v, msg)
 	case proto.DecrCommand:
 		return decrCommandHandler(s, v, msg)
+	case proto.LpushCommand:
+		return lpushCommandHandler(s, v, msg)
 	default:
 		return unhandledCommand(msg)
 	}

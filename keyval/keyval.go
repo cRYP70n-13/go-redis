@@ -8,14 +8,16 @@ import (
 
 // KV is the inner hashMap we are using for our inMem data store.
 type KV struct {
-	mu   sync.RWMutex
-	data map[string][]byte
+	mu       sync.RWMutex
+	data     map[string][]byte
+	slices   map[string][]string
 }
 
 // NewKeyVal creates an inMemory data store.
 func NewKeyVal() *KV {
 	return &KV{
-		data: map[string][]byte{},
+		data:   map[string][]byte{},
+		slices: map[string][]string{},
 	}
 }
 
@@ -85,4 +87,13 @@ func (kv *KV) Decr(key []byte) (int, error) {
 	kv.data[string(key)] = []byte(strconv.Itoa(intValue))
 
 	return intValue, nil
+}
+
+func (kv *KV) Push(key string, value []string) (int, error) {
+	kv.mu.Lock()
+	defer kv.mu.Unlock()
+
+	kv.slices[key] = append(kv.slices[key], value...)
+
+	return len(kv.slices[key]), nil
 }

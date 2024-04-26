@@ -67,7 +67,6 @@ func (p *Peer) ReadLoop() error {
 				continue
 			}
 
-			// TODO: Think of a better way to handle errors
 			p.msgCh <- Message{
 				Cmd:  cmd,
 				Peer: p,
@@ -108,6 +107,8 @@ func parseCommand(v resp.Value) (proto.Command, error) {
 		return parseIncrCommand(v)
 	case proto.CommandDECR:
 		return parseDecrCommand(v)
+	case proto.CommandLPUSH:
+		return parseLpushCommand(v)
 	default:
 		return nil, fmt.Errorf("unsupported command: %s", cmdType)
 	}
@@ -133,9 +134,6 @@ func parseClientCommand(v resp.Value) (proto.ClientCommand, error) {
 // $3 => the length of the third argument
 // bar => the third argument.
 func parseSetCommand(v resp.Value) (proto.SetCommand, error) {
-	// TODO: This is more of a hack we need to do proper parsing/handling with no assumptions
-	// because I can send whatever I want here, then we can return proper errors
-	// And then we have to move all of these to our serdes
 	if len(v.Array()) != 3 {
 		return proto.SetCommand{}, fmt.Errorf("invalid number of variables for SET command")
 	}
@@ -207,7 +205,6 @@ func parseConfigGetCommand(v resp.Value) (proto.ConfigGetCommand, error) {
 		return proto.ConfigGetCommand{}, fmt.Errorf("invalid number of variables for CONFIG command")
 	}
 
-	fmt.Println(v.Array())
 	var cmd proto.ConfigGetCommand
 
 	if len(v.Array()) == 2 {
@@ -256,4 +253,26 @@ func parseDecrCommand(v resp.Value) (proto.DecrCommand, error) {
 	}
 
 	return cmd, nil
+}
+
+func parseLpushCommand(v resp.Value) (proto.LpushCommand, error) {
+	if len(v.Array()) < 3 {
+		return proto.LpushCommand{}, fmt.Errorf("invalid number of arguments for LPUSH command")
+	}
+
+	cmd := proto.LpushCommand{
+		Key:   v.Array()[1].String(),
+		Value: getElement(v),
+	}
+
+	return cmd, nil
+}
+
+func getElement(v resp.Value) []string {
+	ret := make([]string, 0)
+    for _, v := range v.Array()[2:] {
+		ret = append(ret, v.String())
+	}
+
+	return ret
 }

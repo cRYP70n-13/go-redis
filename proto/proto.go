@@ -19,6 +19,7 @@ const (
 	CommandDEL     = "DEL"
 	CommandINCR    = "INCR"
 	CommandDECR    = "DECR"
+	CommandLPUSH   = "LPUSH"
 )
 
 type Command interface{}
@@ -67,6 +68,11 @@ type IncrCommand struct {
 
 type DecrCommand struct {
 	Key string
+}
+
+type LpushCommand struct {
+	Key   string
+	Value []string
 }
 
 func WriteRespMap(m map[string]string) []byte {
